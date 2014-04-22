@@ -108,6 +108,37 @@ func (w WapSNMP) Get(oid Oid) (interface{}, error) {
 	return result, nil
 }
 
+// Set sends an SNMP set request setting value for and oid. Returns new value.
+func (w WapSNMP) Set(oid Oid, value interface{}) (interface{}, error) {
+	requestID := getRandomRequestID()
+	req, err := EncodeSequence([]interface{}{Sequence, int(w.Version), w.Community,
+		[]interface{}{AsnSetRequest, requestID, 0, 0,
+			[]interface{}{Sequence,
+				[]interface{}{Sequence, oid, value}}}})
+
+	if err != nil {
+		return nil, err
+	}
+
+	response := make([]byte, bufSize, bufSize)
+	numRead, err := poll(w.conn, req, response, w.retries, 500*time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+
+	decodedResponse, err := DecodeSequence(response[:numRead])
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch the varbinds out of the packet.
+	respPacket := decodedResponse[3].([]interface{})
+	varbinds := respPacket[4].([]interface{})
+	result := varbinds[1].([]interface{})[2]
+
+	return result, nil
+}
+
 // GetMultiple issues a single GET SNMP request requesting multiple values
 func (w WapSNMP) GetMultiple(oids []Oid) (map[string]interface{}, error) {
 	requestID := getRandomRequestID()
