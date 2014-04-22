@@ -78,19 +78,9 @@ func poll(conn net.Conn, toSend []byte, respondBuffer []byte, retries int, timeo
 	return 0, err
 }
 
-// Get sends an SNMP get request requesting the value for an oid.
-func (w WapSNMP) Get(oid Oid) (interface{}, error) {
-	requestID := getRandomRequestID()
-	req, err := EncodeSequence([]interface{}{Sequence, int(w.Version), w.Community,
-		[]interface{}{AsnGetRequest, requestID, 0, 0,
-			[]interface{}{Sequence,
-				[]interface{}{Sequence, oid, nil}}}})
-	if err != nil {
-		return nil, err
-	}
-
+func (w WapSNMP) sendAndReceiveSingleOidRequest(request []byte) (interface{}, error) {
 	response := make([]byte, bufSize, bufSize)
-	numRead, err := poll(w.conn, req, response, w.retries, 500*time.Millisecond)
+	numRead, err := poll(w.conn, request, response, w.retries, 500*time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +96,20 @@ func (w WapSNMP) Get(oid Oid) (interface{}, error) {
 	result := varbinds[1].([]interface{})[2]
 
 	return result, nil
+}
+
+// Get sends an SNMP get request requesting the value for an oid.
+func (w WapSNMP) Get(oid Oid) (interface{}, error) {
+	requestID := getRandomRequestID()
+	req, err := EncodeSequence([]interface{}{Sequence, int(w.Version), w.Community,
+		[]interface{}{AsnGetRequest, requestID, 0, 0,
+			[]interface{}{Sequence,
+				[]interface{}{Sequence, oid, nil}}}})
+	if err != nil {
+		return nil, err
+	}
+
+	return w.sendAndReceiveSingleOidRequest(req)
 }
 
 // Set sends an SNMP set request setting value for and oid. Returns new value.
@@ -120,42 +124,12 @@ func (w WapSNMP) Set(oid Oid, value interface{}) (interface{}, error) {
 		return nil, err
 	}
 
-	response := make([]byte, bufSize, bufSize)
-	numRead, err := poll(w.conn, req, response, w.retries, 500*time.Millisecond)
-	if err != nil {
-		return nil, err
-	}
-
-	decodedResponse, err := DecodeSequence(response[:numRead])
-	if err != nil {
-		return nil, err
-	}
-
-	// Fetch the varbinds out of the packet.
-	respPacket := decodedResponse[3].([]interface{})
-	varbinds := respPacket[4].([]interface{})
-	result := varbinds[1].([]interface{})[2]
-
-	return result, nil
+	return w.sendAndReceiveSingleOidRequest(req)
 }
 
-// GetMultiple issues a single GET SNMP request requesting multiple values
-func (w WapSNMP) GetMultiple(oids []Oid) (map[string]interface{}, error) {
-	requestID := getRandomRequestID()
-
-	varbinds := []interface{}{Sequence}
-	for _, oid := range oids {
-		varbinds = append(varbinds, []interface{}{Sequence, oid, nil})
-	}
-	req, err := EncodeSequence([]interface{}{Sequence, int(w.Version), w.Community,
-		[]interface{}{AsnGetRequest, requestID, 0, 0, varbinds}})
-
-	if err != nil {
-		return nil, err
-	}
-
+func (w WapSNMP) sendAndReceiveMultipleOidsRequest(request []byte) (map[string]interface{}, error) {
 	response := make([]byte, bufSize, bufSize)
-	numRead, err := poll(w.conn, req, response, w.retries, 500*time.Millisecond)
+	numRead, err := poll(w.conn, request, response, w.retries, 500*time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +151,43 @@ func (w WapSNMP) GetMultiple(oids []Oid) (map[string]interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// GetMultiple issues a single GET SNMP request requesting multiple values
+func (w WapSNMP) GetMultiple(oids []Oid) (map[string]interface{}, error) {
+	requestID := getRandomRequestID()
+
+	varbinds := []interface{}{Sequence}
+	for _, oid := range oids {
+		varbinds = append(varbinds, []interface{}{Sequence, oid, nil})
+	}
+	req, err := EncodeSequence([]interface{}{Sequence, int(w.Version), w.Community,
+		[]interface{}{AsnGetRequest, requestID, 0, 0, varbinds}})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return w.sendAndReceiveMultipleOidsRequest(req)
+}
+
+// SetMultiple issues a single SET SNMP request setting multiple values
+func (w WapSNMP) SetMultiple(values map[string]interface{}) (map[string]interface{}, error) {
+	requestID := getRandomRequestID()
+
+	varbinds := []interface{}{Sequence}
+	for oidString, value := range values {
+		oid := MustParseOid(oidString)
+		varbinds = append(varbinds, []interface{}{Sequence, oid, value})
+	}
+	req, err := EncodeSequence([]interface{}{Sequence, int(w.Version), w.Community,
+		[]interface{}{AsnSetRequest, requestID, 0, 0, varbinds}})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return w.sendAndReceiveMultipleOidsRequest(req)
 }
 
 // GetNext issues a GETNEXT SNMP request.
