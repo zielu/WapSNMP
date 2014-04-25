@@ -56,23 +56,24 @@ func poll(conn net.Conn, toSend []byte, respondBuffer []byte, retries int, timeo
 			log.Printf("Couldn't set write deadline. Retrying. Retry %d/%d\n", i, retries)
 			continue
 		}
+		log.Printf("About to write packet at [%v] with deadline at [%v]...", time.Now(), deadline)
 		if _, err = conn.Write(toSend); err != nil {
 			log.Printf("Couldn't write. Retrying. Retry %d/%d\n", i, retries)
 			continue
 		}
-
+		log.Printf("Packet written \\o/")
 		deadline = time.Now().Add(timeout)
 		if err = conn.SetReadDeadline(deadline); err != nil {
 			log.Printf("Couldn't set read deadline. Retrying. Retry %d/%d\n", i, retries)
 			continue
 		}
-
+		log.Printf("About to read packet at [%v] with deadline at [%v]...", time.Now(), deadline)
 		numRead := 0
 		if numRead, err = conn.Read(respondBuffer); err != nil {
 			log.Printf("Couldn't read. Retrying. Retry %d/%d\n", i, retries)
 			continue
 		}
-
+		log.Printf("Packet read \\o/")
 		return numRead, nil
 	}
 	return 0, err
