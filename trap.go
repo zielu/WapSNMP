@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	//"time"
 )
 
 type Notification struct {
@@ -18,7 +19,7 @@ type WapSNMPListener struct {
 	target    string
 	conn      *net.UDPConn // Cache the UDP connection in the object.
 	connected bool
-	channel   chan Notification
+	channel   *chan Notification
 }
 
 func NewWapSNMPListener(version SNMPVersion) (*WapSNMPListener, error) {
@@ -29,7 +30,7 @@ func NewWapSNMPListenerBind(bindIpAddress string, version SNMPVersion) (*WapSNMP
 	return NewWapSNMPListenerBindAndPort(bindIpAddress, 162, version)
 }
 
-func (listener *WapSNMPListener) GetChannel() chan Notification {
+func (listener *WapSNMPListener) GetChannel() *chan Notification {
 	return listener.channel
 }
 
@@ -40,16 +41,19 @@ func NewWapSNMPListenerBindAndPort(bindIpAddress string, port uint, version SNMP
 	if err != nil {
 		return nil, fmt.Errorf(`error listening on ("udp", "%s") : %s`, target, conn)
 	}
-
-	listener := WapSNMPListener{bindIpAddress, port, version, target, conn, true, make(chan Notification)}
-	go func() {
+	channel := make(chan Notification)
+	listener := WapSNMPListener{bindIpAddress, port, version, target, conn, true, &channel}
+	go func(myListener *WapSNMPListener) {
 		for {
+			log.Printf("Awaiting traps [%v]", myListener.target)
 			buffer := make([]byte, bufSize, bufSize)
-			log.Printf("Awaiting traps [%v]", target)
-			readLen, address, err := listener.conn.ReadFromUDP(buffer)
+			//timeout := time.Second
+			//deadline := time.Now().Add(timeout)
+			//myListener.conn.SetReadDeadline(deadline)
+			readLen, address, err := myListener.conn.ReadFromUDP(buffer)
 			if err != nil {
-				log.Printf(`error reading from ("udp", "%s") : %s`, target, err)
-				if listener.connected {
+				//log.Printf(`error reading from ("udp", "%s") : %s`, myListener.target, err)
+				if myListener.connected {
 					continue
 				} else {
 					break
@@ -62,12 +66,14 @@ func NewWapSNMPListenerBindAndPort(bindIpAddress string, port uint, version SNMP
 				log.Printf(`error decoding notification from ("udp", "%s") : %s`, address, err)
 				continue
 			}
+			log.Printf("Decoded response: %v", decodedResponse)
 			result := extractMultipleOids(decodedResponse)
 			notification := Notification{address, result}
-			listener.channel <- notification
+			*myListener.channel <- notification
+			log.Printf("Trap consumed")
 		}
-		log.Printf(`finished listening on ("udp", "%s")`, listener.target)
-	}()
+		log.Printf(`finished listening on ("udp", "%s")`, myListener.target)
+	}(&listener)
 
 	return &listener, nil
 }
