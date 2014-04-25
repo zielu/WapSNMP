@@ -127,6 +127,20 @@ func (w WapSNMP) Set(oid Oid, value interface{}) (interface{}, error) {
 	return w.sendAndReceiveSingleOidRequest(req)
 }
 
+func extractMultipleOids(decodedResponse []interface{}) map[string]interface{} {
+	// Find the varbinds
+	respPacket := decodedResponse[3].([]interface{})
+	respVarbinds := respPacket[4].([]interface{})
+
+	result := make(map[string]interface{})
+	for _, v := range respVarbinds[1:] { // First element is just a sequence
+		oid := v.([]interface{})[1].(Oid).String()
+		value := v.([]interface{})[2]
+		result[oid] = value
+	}
+	return result
+}
+
 func (w WapSNMP) sendAndReceiveMultipleOidsRequest(request []byte) (map[string]interface{}, error) {
 	response := make([]byte, bufSize, bufSize)
 	numRead, err := poll(w.conn, request, response, w.retries, 500*time.Millisecond)
@@ -139,16 +153,7 @@ func (w WapSNMP) sendAndReceiveMultipleOidsRequest(request []byte) (map[string]i
 		return nil, err
 	}
 
-	// Find the varbinds
-	respPacket := decodedResponse[3].([]interface{})
-	respVarbinds := respPacket[4].([]interface{})
-
-	result := make(map[string]interface{})
-	for _, v := range respVarbinds[1:] { // First element is just a sequence
-		oid := v.([]interface{})[1].(Oid).String()
-		value := v.([]interface{})[2]
-		result[oid] = value
-	}
+	result := extractMultipleOids(decodedResponse)
 
 	return result, nil
 }

@@ -6,6 +6,11 @@ import (
 	"net"
 )
 
+type Notification struct {
+	Origin *net.UDPAddr
+	Oids   map[string]interface{}
+}
+
 type WapSNMPListener struct {
 	IpAddress string
 	Port      uint
@@ -13,7 +18,7 @@ type WapSNMPListener struct {
 	target    string
 	conn      *net.UDPConn // Cache the UDP connection in the object.
 	connected bool
-	channel   chan []byte
+	channel   chan Notification
 }
 
 func NewWapSNMPListener(version SNMPVersion) (*WapSNMPListener, error) {
@@ -24,7 +29,7 @@ func NewWapSNMPListenerBind(bindIpAddress string, version SNMPVersion) (*WapSNMP
 	return NewWapSNMPListenerBindAndPort(bindIpAddress, 162, version)
 }
 
-func (listener *WapSNMPListener) GetChannel() chan []byte {
+func (listener *WapSNMPListener) GetChannel() chan Notification {
 	return listener.channel
 }
 
@@ -36,7 +41,7 @@ func NewWapSNMPListenerBindAndPort(bindIpAddress string, port uint, version SNMP
 		return nil, fmt.Errorf(`error listening on ("udp", "%s") : %s`, target, conn)
 	}
 
-	listener := WapSNMPListener{bindIpAddress, port, version, target, conn, true, make(chan []byte)}
+	listener := WapSNMPListener{bindIpAddress, port, version, target, conn, true, make(chan Notification)}
 	go func() {
 		for {
 			buffer := make([]byte, bufSize, bufSize)
@@ -50,9 +55,16 @@ func NewWapSNMPListenerBindAndPort(bindIpAddress string, port uint, version SNMP
 					break
 				}
 			}
-			filledBuffer := buffer[0:readLen]
+			filledBuffer := buffer[:readLen]
 			log.Printf("Received bytes [%v]: %v ", address, filledBuffer)
-			listener.channel <- filledBuffer
+			decodedResponse, err := DecodeSequence(filledBuffer)
+			if err != nil {
+				log.Printf(`error decoding notification from ("udp", "%s") : %s`, address, err)
+				continue
+			}
+			result := extractMultipleOids(decodedResponse)
+			notification := Notification{address, result}
+			listener.channel <- notification
 		}
 		log.Printf(`finished listening on ("udp", "%s")`, listener.target)
 	}()
