@@ -82,7 +82,10 @@ const (
 	AsnGetNextRequest BERType = 0xa1
 	AsnGetResponse    BERType = 0xa2
 	AsnSetRequest     BERType = 0xa3
+	AsnTrapV1         BERType = 0xa4
 	AsnGetBulkRequest BERType = 0xa5
+	AsnInformRequest  BERType = 0xa6
+	AsnTrapV2         BERType = 0xa7
 
 	NoSuchInstance BERType = 0x81
 	EndOfMibView   BERType = 0x82
@@ -187,6 +190,14 @@ func EncodeInteger(toEncode int) []byte {
 	return result
 }
 
+func DecodeIpaddress(toparse []byte) (string, error) {
+	if len(toparse) != 4 {
+		return "", fmt.Errorf("Ipaddress length must be 4 bytes")
+	}
+	result := fmt.Sprintf("%v.%v.%v.%v", toparse[0], toparse[1], toparse[2], toparse[3])
+	return result, nil
+}
+
 // DecodeSequence decodes BER binary data into into *[]interface{}.
 func DecodeSequence(toparse []byte) ([]interface{}, error) {
 	var result []interface{}
@@ -267,7 +278,19 @@ func DecodeSequence(toparse []byte) ([]interface{}, error) {
 				return nil, err
 			}
 			result = append(result, pdu)
+		case AsnIpaddress:
+			val, err := DecodeIpaddress(berValue)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, val)
 		case AsnGetNextRequest, AsnGetRequest, AsnGetResponse:
+			pdu, err := DecodeSequence(berAll)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, pdu)
+		case AsnTrapV1, AsnTrapV2, AsnInformRequest:
 			pdu, err := DecodeSequence(berAll)
 			if err != nil {
 				return nil, err
