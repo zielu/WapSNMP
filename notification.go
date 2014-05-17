@@ -12,6 +12,11 @@ type Notification struct {
 	Oids   map[string]interface{}
 }
 
+type SnmpNotificationsTarget struct {
+	Target string
+	Port   uint
+}
+
 type WapSNMPListener struct {
 	IpAddress string
 	Port      uint
@@ -22,12 +27,24 @@ type WapSNMPListener struct {
 	channel   *chan Notification
 }
 
-func NewWapSNMPListener(version SNMPVersion) (*WapSNMPListener, error) {
-	return NewWapSNMPListenerBind("", version)
+type NotificationListener interface {
+	Received(notification Notification)
 }
 
-func NewWapSNMPListenerBind(bindIpAddress string, version SNMPVersion) (*WapSNMPListener, error) {
-	return NewWapSNMPListenerBindAndPort(bindIpAddress, 162, version)
+func NewSnmpNotificationsTarget(bindAddress string) SnmpNotificationsTarget {
+	return SnmpNotificationsTarget{bindAddress, 162}
+}
+
+func NewSnmpNotificationsTargetWithPort(bindAddress string, port uint) SnmpNotificationsTarget {
+	return SnmpNotificationsTarget{bindAddress, port}
+}
+
+func NewWapSNMPListener(version SNMPVersion) (*WapSNMPListener, error) {
+	return NewWapSNMPListenerBind(NewSnmpNotificationsTarget(""), version)
+}
+
+func NewWapSNMPListenerBind(bindTarget SnmpNotificationsTarget, version SNMPVersion) (*WapSNMPListener, error) {
+	return NewWapSNMPListenerBindAndPort(bindTarget.Target, bindTarget.Port, version)
 }
 
 func (listener *WapSNMPListener) GetChannel() *chan Notification {
@@ -47,9 +64,6 @@ func NewWapSNMPListenerBindAndPort(bindIpAddress string, port uint, version SNMP
 		for {
 			log.Printf("Awaiting traps [%v]", myListener.target)
 			buffer := make([]byte, bufSize, bufSize)
-			//timeout := time.Second
-			//deadline := time.Now().Add(timeout)
-			//myListener.conn.SetReadDeadline(deadline)
 			readLen, address, err := myListener.conn.ReadFromUDP(buffer)
 			if err != nil {
 				//log.Printf(`error reading from ("udp", "%s") : %s`, myListener.target, err)

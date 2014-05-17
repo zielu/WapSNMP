@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func DoGetTableTest(target string) {
+func DoGetTableTest(target SnmpTarget) {
 	community := "public"
 	version := SNMPv2c
 
@@ -29,7 +29,7 @@ func DoGetTableTest(target string) {
 	}
 }
 
-func DoWalkTest(target string) {
+func DoWalkTest(target SnmpTarget) {
 	community := "public"
 	version := SNMPv2c
 
@@ -66,7 +66,7 @@ func DoWalkTest(target string) {
 	}
 }
 
-func DoGetTest(target string) {
+func DoGetTest(target SnmpTarget) {
 	community := "public"
 	version := SNMPv2c
 

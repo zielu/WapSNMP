@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+type SnmpTarget struct {
+	Target string //target device address
+	Port   uint
+}
+
 // The object type that lets you do SNMP requests.
 type WapSNMP struct {
 	Target    string        // Target device for these SNMP events.
@@ -24,20 +29,32 @@ const (
 	bufSize int = 16384
 )
 
+func NewSnmpTarget(target string) SnmpTarget {
+	return NewSnmpTargetWithPort(target, 161)
+}
+
+func NewSnmpTargetWithPort(target string, port uint) SnmpTarget {
+	return SnmpTarget{target, port}
+}
+
+func (snmpTarget *SnmpTarget) String() string {
+	return fmt.Sprintf("%s:%v", snmpTarget.Target, snmpTarget.Port)
+}
+
 // NewWapSNMP creates a new WapSNMP object. Opens a udp connection to the device that will be used for the SNMP packets.
-func NewWapSNMP(target, community string, version SNMPVersion, timeout time.Duration, retries int) (*WapSNMP, error) {
-	targetPort := fmt.Sprintf("%s:161", target)
+func NewWapSNMP(target SnmpTarget, community string, version SNMPVersion, timeout time.Duration, retries int) (*WapSNMP, error) {
+	targetPort := fmt.Sprintf("%s:%v", target.Target, target.Port)
 	conn, err := net.DialTimeout("udp", targetPort, timeout)
 	if err != nil {
 		return nil, fmt.Errorf(`error connecting to ("udp", "%s") : %s`, targetPort, err)
 	}
-	return &WapSNMP{target, community, version, timeout, retries, conn}, nil
+	return &WapSNMP{target.Target, community, version, timeout, retries, conn}, nil
 }
 
 /* NewWapSNMPOnConn creates a new WapSNMP object from an existing net.Conn.
 
 It does not check if the provided target is valid.*/
-func NewWapSNMPOnConn(target, community string, version SNMPVersion, timeout time.Duration, retries int, conn net.Conn) *WapSNMP {
+func NewWapSNMPOnConn(target string, community string, version SNMPVersion, timeout time.Duration, retries int, conn net.Conn) *WapSNMP {
 	return &WapSNMP{target, community, version, timeout, retries, conn}
 }
 
